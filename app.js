@@ -168,6 +168,7 @@ function applyInfraFilters() {
 }
 
 // === ВІДПРАВКА СТАТУСУ "ПРОБЛЕМНИЙ" НА СЕРВЕР ===
+// === ВІДПРАВКА СТАТУСУ "ПРОБЛЕМНИЙ" НА СЕРВЕР ===
 window.markProblematic = async function(id) {
     document.getElementById(`btn-${id}`).innerText = "Запис...";
     document.getElementById(`btn-${id}`).disabled = true;
@@ -175,26 +176,48 @@ window.markProblematic = async function(id) {
     try {
         await fetch(DATA_URL, {
             method: 'POST',
-            body: JSON.stringify({ id: id }),
-            // redirect: 'follow' обов'язково для Apps Script!
+            body: JSON.stringify({ id: id, action: 'add' }), // Додали action: 'add'
             redirect: 'follow' 
         });
         
-        alert("Об'єкт додано до чорного списку!");
-        
-        // Оновлюємо локальний стан, щоб почервоніло одразу
+        // Оновлюємо локальний стан
         const target = globalData.infrastructure.features.find(f => f.properties.id === id);
         if (target) target.properties.isProblematic = true;
         
-        applyInfraFilters(); // Перемальовуємо
-        
-        // Закриваємо попап
-        const popups = document.getElementsByClassName('maplibregl-popup');
-        if (popups.length) popups[0].remove();
-
+        applyInfraFilters();
+        closePopups();
     } catch(e) {
         alert("Помилка запису.");
     }
+}
+
+// === ВІДНОВЛЕННЯ ОБ'ЄКТУ ===
+window.unmarkProblematic = async function(id) {
+    document.getElementById(`btn-unmark-${id}`).innerText = "Відновлення...";
+    document.getElementById(`btn-unmark-${id}`).disabled = true;
+
+    try {
+        await fetch(DATA_URL, {
+            method: 'POST',
+            body: JSON.stringify({ id: id, action: 'remove' }), // Передаємо action: 'remove'
+            redirect: 'follow' 
+        });
+        
+        // Оновлюємо локальний стан, знімаємо червоний прапорець
+        const target = globalData.infrastructure.features.find(f => f.properties.id === id);
+        if (target) target.properties.isProblematic = false;
+        
+        applyInfraFilters();
+        closePopups();
+    } catch(e) {
+        alert("Помилка запису.");
+    }
+}
+
+// Допоміжна функція для закриття попапів
+function closePopups() {
+    const popups = document.getElementsByClassName('maplibregl-popup');
+    if (popups.length) popups[0].remove();
 }
 
 function drawRouteOnMap() {
@@ -245,24 +268,6 @@ async function initMap() {
         map.addSource('nodes', { type: 'geojson', data: globalData.nodes });
         map.addSource('infrastructure', { type: 'geojson', data: globalData.infrastructure });
 
-        // ВІЗУАЛІЗАЦІЯ ВУЗЛІВ (НП)
-        map.addLayer({
-            'id': 'nodes-terminals',
-            'type': 'circle',
-            'source': 'nodes',
-            'filter': ['==', 'type', 'Terminal'],
-            'paint': { 'circle-color': '#e32636', 'circle-radius': 8, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' }
-        });
-
-        map.addLayer({
-            'id': 'nodes-depots',
-            'type': 'circle',
-            'source': 'nodes',
-            'filter': ['==', 'type', 'Depot'],
-            'paint': { 'circle-color': '#007cbf', 'circle-radius': 6, 'circle-stroke-width': 1, 'circle-stroke-color': '#fff' }
-        });
-
-        // ВІЗУАЛІЗАЦІЯ ІНФРАСТРУКТУРИ
         map.addLayer({
             'id': 'infrastructure-layer',
             'type': 'circle',
@@ -286,10 +291,35 @@ async function initMap() {
                 'circle-stroke-color': ['case', ['==', ['get', 'isProblematic'], true], '#000000', '#ffffff']
             }
         });
+        // ВІЗУАЛІЗАЦІЯ ВУЗЛІВ (НП)
+        map.addLayer({
+            'id': 'nodes-terminals',
+            'type': 'circle',
+            'source': 'nodes',
+            'filter': ['==', 'type', 'Terminal'],
+            'paint': { 'circle-color': '#e32636', 'circle-radius': 8, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' }
+        });
+
+        map.addLayer({
+            'id': 'nodes-depots',
+            'type': 'circle',
+            'source': 'nodes',
+            'filter': ['==', 'type', 'Depot'],
+            'paint': { 'circle-color': '#007cbf', 'circle-radius': 6, 'circle-stroke-width': 1, 'circle-stroke-color': '#fff' }
+        });
+
+        // ВІЗУАЛІЗАЦІЯ ІНФРАСТРУКТУРИ
 
         // ІНТЕРАКТИВНІСТЬ
         document.getElementById('type-select').addEventListener('change', applyInfraFilters);
 
+        // Тумблер видимості інфраструктури
+        document.getElementById('toggle-infra').addEventListener('change', (e) => {
+            const visibility = e.target.checked ? 'visible' : 'none';
+            if (map.getLayer('infrastructure-layer')) {
+                map.setLayoutProperty('infrastructure-layer', 'visibility', visibility);
+            }
+        });
         // РЕДАКТИРОВАНИЕ МАРШРУТА (Добавление промежуточных точек правым кликом)
         map.on('contextmenu', (e) => {
             const coords = [e.lngLat.lng, e.lngLat.lat];
@@ -340,9 +370,12 @@ async function initMap() {
         // Попапи для інфраструктури
         map.on('click', 'infrastructure-layer', (e) => {
             const props = e.features[0].properties;
+            
+            // Якщо об'єкт проблемний - показуємо статус і зелену кнопку відновлення
             let statusHTML = props.isProblematic ? 
-                `<b style="color:red;">⚠️ ЗРУЙНОВАНО / БЛОКОВАНО</b>` : 
-                `<button id="btn-${props.id}" class="problem-btn" onclick="markProblematic('${props.id}')">Відмітити як проблемний</button>`;
+                `<b style="color:red;">⚠️ ЗРУЙНОВАНО / БЛОКОВАНО</b><br>
+                 <button id="btn-unmark-${props.id}" class="problem-btn" style="background: #28a745; margin-top: 10px;" onclick="unmarkProblematic('${props.id}')">🟢 Відновити об'єкт</button>` : 
+                `<button id="btn-${props.id}" class="problem-btn" onclick="markProblematic('${props.id}')">🚨 Відмітити як проблемний</button>`;
 
             new maplibregl.Popup()
                 .setLngLat(e.lngLat)
