@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TMS: Логістична Карта</title>
+    
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="loader">
+        <div class="spinner"></div>
+        <p id="loader-text">Завантаження карти та вузлів...</p>
+    </div>
+
+    <!-- ПАНЕЛЬ КЕРУВАННЯ -->
+    <div id="filter-panel">
+        <h3>TMS Маршрутизатор</h3>
+        
+        <label>Старт (Вузол):</label>
+        <select id="start-node"><option value="">Оберіть старт...</option></select>
+        
+        <label>Фініш (Вузол):</label>
+        <select id="end-node"><option value="">Оберіть фініш...</option></select>
+
+        <label>Інфраструктура на шляху:</label>
+        <select id="type-select">
+            <option value="all">Всі об'єкти</option>
+            <option value="road_bridge">Автомобільні мости</option>
+            <option value="rail_bridge">Залізничні мости</option>
+            <option value="auto_crossing">Залізничні переїзди</option>
+        </select>
+        
+        <div id="stats">Об'єктів поруч: <span id="obj-count">0</span></div>
+
+        <button onclick="calculateRoute()" class="btn-primary">Побудувати маршрут</button>
+        <button onclick="clearRoute()" class="btn-danger">Скинути</button>
+        
+        <p class="hint">ℹ️ Правий клік по карті — додати точку об'їзду.</p>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
