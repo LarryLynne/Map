@@ -290,11 +290,46 @@ async function initMap() {
         // ІНТЕРАКТИВНІСТЬ
         document.getElementById('type-select').addEventListener('change', applyInfraFilters);
 
+        // РЕДАКТИРОВАНИЕ МАРШРУТА (Добавление промежуточных точек правым кликом)
         map.on('contextmenu', (e) => {
             const coords = [e.lngLat.lng, e.lngLat.lat];
             waypoints.push(coords);
-            const marker = new maplibregl.Marker({ color: '#ffcc00' }).setLngLat(coords).addTo(map);
+            
+            // Создаем маркер и делаем его ПЕРЕТАСКИВАЕМЫМ (draggable: true)
+            const marker = new maplibregl.Marker({ color: '#ffcc00', draggable: true })
+                .setLngLat(coords)
+                .addTo(map);
+            
             userMarkers.push(marker);
+
+            // ФИЧА 1: Перетаскивание точки мышкой
+            marker.on('dragend', () => {
+                const lngLat = marker.getLngLat();
+                const index = userMarkers.indexOf(marker);
+                if (index > -1) {
+                    waypoints[index] = [lngLat.lng, lngLat.lat]; // Обновляем координаты
+                    
+                    if (document.getElementById('start-node').value && document.getElementById('end-node').value) {
+                        calculateRoute(); // Перестраиваем маршрут на лету
+                    }
+                }
+            });
+
+            // ФИЧА 2: Удаление точки по левому клику на сам маркер
+            marker.getElement().addEventListener('click', (event) => {
+                event.stopPropagation(); // Чтобы карта не думала, что кликнули по ней
+                
+                const index = userMarkers.indexOf(marker);
+                if (index > -1) {
+                    waypoints.splice(index, 1); // Удаляем из памяти
+                    userMarkers.splice(index, 1);
+                    marker.remove(); // Удаляем с карты
+                    
+                    if (document.getElementById('start-node').value && document.getElementById('end-node').value) {
+                        calculateRoute(); // Перестраиваем маршрут без этой точки
+                    }
+                }
+            });
             
             // Якщо є старт і фініш - одразу перемальовуємо
             if (document.getElementById('start-node').value && document.getElementById('end-node').value) {
