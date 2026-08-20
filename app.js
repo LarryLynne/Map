@@ -62,7 +62,7 @@ function populateNodeSelectors() {
     });
 }
 
-// === ЛОГІКА МАРШРУТИЗАЦІЇ (OSRM) ===
+// === ЛОГІКА МАРШРУТИЗАЦІЇ (OSRM) З ПІДРАХУНКОМ КМ ===
 async function calculateRoute() {
     const startVal = document.getElementById('start-node').value;
     const endVal = document.getElementById('end-node').value;
@@ -72,25 +72,36 @@ async function calculateRoute() {
         return;
     }
 
-    // Шукаємо оригінальні координати в завантажених даних
     const startNode = globalData.nodes.features.find(f => f.properties.name === startVal);
     const endNode = globalData.nodes.features.find(f => f.properties.name === endVal);
-    
     if (!startNode || !endNode) return;
 
     startCoords = startNode.geometry.coordinates;
     endCoords = endNode.geometry.coordinates;
 
+    // 1. Отримуємо БАЗОВУ відстань (без об'їздів)
+    let baseDistanceKm = 0;
+    try {
+        const baseUrl = `https://router.project-osrm.org/route/v1/driving/${startCoords[0]},${startCoords[1]};${endCoords[0]},${endCoords[1]}?overview=false`;
+        const baseRes = await fetch(baseUrl);
+        const baseData = await baseRes.json();
+        if (baseData.code === 'Ok') {
+            baseDistanceKm = (baseData.routes[0].distance / 1000).toFixed(1);
+        }
+    } catch(e) { console.warn("Помилка базового маршруту", e); }
+
+    // 2. Отримуємо АКТУАЛЬНУ відстань (з waypoints)
     const allRoutePoints = [startCoords, ...waypoints, endCoords];
     const coordsString = allRoutePoints.map(p => `${p[0]},${p[1]}`).join(';');
-    
     const url = `https://router.project-osrm.org/route/v1/driving/${coordsString}?overview=full&geometries=geojson`;
 
     try {
         const response = await fetch(url);
         const data = await response.json();
-        
         if (data.code !== 'Ok') throw new Error("OSRM Error");
+
+        // Витягуємо дистанцію актуального маршруту
+        let actualDistanceKm = (data.routes[0].distance / 1000).toFixed(1);
 
         routeLineGeoJSON = {
             type: 'FeatureCollection',
@@ -98,9 +109,13 @@ async function calculateRoute() {
         };
 
         drawRouteOnMap();
-        filterInfrastructureByRoute(); // МАГІЯ: Фільтруємо інфраструктуру вздовж маршруту
+        filterInfrastructureByRoute(); 
         
-        // Зум на маршрут
+        // Оновлюємо UI кілометражу
+        document.getElementById('route-stats').style.display = 'block';
+        document.getElementById('dist-base').innerText = baseDistanceKm;
+        document.getElementById('dist-actual').innerText = actualDistanceKm;
+        
         const bbox = turf.bbox(routeLineGeoJSON);
         map.fitBounds([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], { padding: 50 });
 
@@ -120,10 +135,25 @@ window.clearRoute = function() {
     if (map.getSource('route')) {
         map.getSource('route').setData({ type: 'FeatureCollection', features: [] });
     }
-    
+    document.getElementById('route-stats').style.display = 'none';
     // Повертаємо всю інфраструктуру на екран
     applyInfraFilters();
 };
+
+function updateTopRightStats(features) {
+    let road = 0, rail = 0, cross = 0;
+    
+    features.forEach(f => {
+        if (f.properties.type === 'road_bridge') road++;
+        else if (f.properties.type === 'rail_bridge') rail++;
+        else if (f.properties.type === 'auto_crossing') cross++;
+    });
+
+    document.getElementById('stat-total').innerText = features.length;
+    document.getElementById('stat-road').innerText = road;
+    document.getElementById('stat-rail').innerText = rail;
+    document.getElementById('stat-cross').innerText = cross;
+}
 
 // === МАГІЯ TURF: ФІЛЬТРАЦІЯ ВЗДОВЖ МАРШРУТУ ===
 function filterInfrastructureByRoute() {
@@ -146,7 +176,7 @@ function filterInfrastructureByRoute() {
     const finalData = { type: 'FeatureCollection', features: filteredFeatures };
     
     map.getSource('infrastructure').setData(finalData);
-    document.getElementById('obj-count').innerText = filteredFeatures.length;
+    updateTopRightStats(filteredFeatures);
 }
 
 // Функція для звичайного фільтру (коли маршруту немає)
@@ -164,7 +194,7 @@ function applyInfraFilters() {
     }
 
     map.getSource('infrastructure').setData({ type: 'FeatureCollection', features: filteredFeatures });
-    document.getElementById('obj-count').innerText = filteredFeatures.length;
+    updateTopRightStats(filteredFeatures);
 }
 
 // === ВІДПРАВКА СТАТУСУ "ПРОБЛЕМНИЙ" НА СЕРВЕР ===
@@ -242,7 +272,7 @@ async function initMap() {
     if (!globalData.infrastructure) return;
 
     document.getElementById('loader').style.display = 'none';
-    document.getElementById('obj-count').innerText = globalData.infrastructure.features.length;
+    updateTopRightStats(globalData.infrastructure.features);
 
     map = new maplibregl.Map({
         container: 'map',

@@ -40,12 +40,25 @@
             <option value="auto_crossing">Залізничні переїзди</option>
         </select>
         
-        <div id="stats">Об'єктів поруч: <span id="obj-count">0</span></div>
+        <div id="route-stats" style="display: none; margin-bottom: 15px; padding: 10px; background: #e9ecef; border-radius: 4px;">
+            <div style="font-size: 13px; margin-bottom: 5px; color: #555;">Базовий шлях: <b id="dist-base">0</b> км</div>
+            <div style="font-size: 13px; color: #333;">Поточний (з об'їздом): <b id="dist-actual" style="color: #e32636; font-size: 15px;">0</b> км</div>
+        </div>
 
         <button onclick="calculateRoute()" class="btn-primary">Побудувати маршрут</button>
         <button onclick="clearRoute()" class="btn-danger">Скинути</button>
         
         <p class="hint">ℹ️ Правий клік по карті — додати точку об'їзду.</p>
+    </div>
+
+    <div id="top-right-stats">
+        <h4>Статистика об'єктів</h4>
+        <ul id="stats-list">
+            <li>Всього на екрані: <span id="stat-total">0</span></li>
+            <li>Автомобільні мости: <span id="stat-road">0</span></li>
+            <li>Залізничні мости: <span id="stat-rail">0</span></li>
+            <li>Залізничні переїзди: <span id="stat-cross">0</span></li>
+        </ul>
     </div>
 
     <div id="map"></div>
